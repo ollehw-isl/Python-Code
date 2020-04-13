@@ -1,0 +1,250 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Mar 12 15:05:28 2020
+
+@author: 산업통계연구실
+"""
+import numpy as np
+import pandas as pd
+from scipy import sparse
+import scipy.sparse as sp
+
+### Numerical attribute Min-man function
+def Numerical_min_max(dataset):
+  numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']    
+  Numeric_df = dataset.select_dtypes(include = numerics)
+  Categorical_df = dataset.select_dtypes(include = 'object')
+  Numeric_df=(Numeric_df-Numeric_df.min())/(Numeric_df.max()-Numeric_df.min())  
+  return(pd.concat([Numeric_df, Categorical_df], axis = 1))
+
+def Numerical_min_max_for_test(train_dataset, test_dataset):
+  numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']    
+  Numeric_df_train = train_dataset.select_dtypes(include = numerics)
+  
+  Numeric_df_test = test_dataset.select_dtypes(include = numerics)
+  Categorical_df_test = test_dataset.select_dtypes(include = 'object')
+  
+  
+  Numeric_df_test=(Numeric_df_test-Numeric_df_train.min())/(Numeric_df_train.max()-Numeric_df_train.min())  
+  return(pd.concat([Numeric_df_test, Categorical_df_test], axis = 1))
+
+
+
+### Factorization
+def Factorization(x_temp,interval = 2):
+  x = x_temp
+  interval_list = list(range(0,interval))
+  interval_list = [round((x+1)/interval,5) - 0.00001 for x in interval_list]
+  interval_list[interval-1] = 1.01
+  Number = ["N1", "N2", "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Nineth", "Tenth"]
+  for i in range(0, len(interval_list)):
+          x[x < interval_list[i]] = i+2
+  y = []
+  for i in range(0, len(x)):
+      y.append(Number[int(x[i])])
+  return(y)
+
+### Discretization
+def Discretization(dataset, interval = 2):
+  numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']    
+  Numeric_df = dataset.select_dtypes(include = numerics)
+  Numeric_df = Numeric_df.apply(Factorization)
+  Categorical_df = dataset.select_dtypes(include = 'object')
+  return(pd.concat([Numeric_df, Categorical_df], axis = 1))
+
+
+###
+### Find_max
+# attribute1, attribute2 : column
+# category1, category2 : category in attribute1
+# v_j : # of categories in attribute2
+# u_i : i th category in attribute2
+# p1 : P(u_i/category1), p2 : P(u_i/category2) 
+occurrences = lambda s, lst: (i for i,e in enumerate(lst) if e == s)
+def Find_max(attribute1, attribute2, category1, category2):
+  v_j = len(attribute2.unique())
+
+  distance = 0
+  category1_index = list(occurrences(category1, attribute1))
+  category2_index = list(occurrences(category2, attribute1))
+  category1_count = len(category1_index)
+  category2_count = len(category2_index)
+  
+  for i in range(0, v_j):
+    u_i = attribute2.unique()[i]
+    category_u_index = list(occurrences(u_i, attribute2))
+    p1 = len(set(category1_index) & set(category_u_index))/category1_count
+    p2 = len(set(category2_index) & set(category_u_index))/category2_count
+    if p1 >= p2:                 ### u_i occurs more frequently with category1 than with category2
+      distance = distance + p1
+    else:
+      distance = distance + p2
+  return(distance - 1)
+
+
+### Algo_distance
+def Algo_distance(dataset):
+    result_list = list()
+    attribute_name = []
+    for i in range(0,len(dataset.columns)):
+        attribute_list = list(range(0,len(dataset.columns)))
+        attribute1 = dataset[dataset.columns[i]]
+        attribute1_length = len(attribute1.unique())
+        result_list.append(np.zeros((attribute1_length, attribute1_length)))
+        attribute_list.remove(attribute_list[i])
+        attribute_name.append(list(attribute1.unique()))
+        for c1 in range(0,(attribute1_length-1)):
+            category1 = attribute1.unique()[c1]
+            for c2 in range((c1+1),attribute1_length):   
+                category2 = attribute1.unique()[c2]
+                Sum = 0
+                for j in attribute_list:
+                    attribute2 = dataset[dataset.columns[j]]
+                    Sum = Sum + Find_max(attribute1 = attribute1, attribute2 = attribute2, category1 = category1, category2 = category2)
+                result_list[i][c1,c2] = Sum/(len(attribute_list))
+                result_list[i][c2,c1] = Sum/(len(attribute_list))
+    return(attribute_name, result_list)
+
+
+### Weight function
+def Weight(distance_list):
+  attribute_length = len(distance_list)
+  w = []
+  for i in range(0,attribute_length):
+    category_length = np.shape(distance_list[i])[0]
+    w_i = np.sum(distance_list[i], axis = None)/2
+    w_i = w_i/(category_length*(category_length-1)/2)
+    w.append(w_i)
+  return(w)
+
+### Distance Function
+# dataset: not discreted dataset
+def Distance(dataset, weight_vector, distance_by_factor, attribute_name):
+  numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']    
+  Numeric_df = dataset.select_dtypes(include = numerics)
+  Categorical_df = dataset.select_dtypes(include = 'object')
+  Numeric_attributes = len(Numeric_df.columns)
+  Categorical_attributes = len(Categorical_df.columns)
+  Numeric_attributes_weights = weight_vector[0:Numeric_attributes]
+  observation_length = len(Numeric_df)
+  Distance_matrix = np.zeros((observation_length, observation_length))
+  for i in range(0,(observation_length-1)):
+    observation1_Numeric = Numeric_df.iloc[i]
+    observation1_Categorical = Categorical_df.iloc[i]
+    for j in range((i+1),observation_length):
+      observation2_Numeric = Numeric_df.iloc[j]
+      observation2_Categorical = Categorical_df.iloc[j]
+      Numeric_Sum = 0
+      Categorical_Sum = 0
+      for a1 in range(Numeric_attributes):
+        Numeric_Sum = Numeric_Sum + (Numeric_attributes_weights[a1]*(observation1_Numeric[a1]-observation2_Numeric[a1]))**2
+      for a2 in range(Categorical_attributes):
+        Categorical_attributes_index = a2 + Numeric_attributes
+        i_index = attribute_name[Categorical_attributes_index].index(observation1_Categorical[a2])
+        j_index = attribute_name[Categorical_attributes_index].index(observation2_Categorical[a2])
+        Categorical_Sum = Categorical_Sum + (distance_by_factor[Categorical_attributes_index][i_index,j_index])**2
+      Distance_matrix[i,j] = Numeric_Sum + Categorical_Sum
+      Distance_matrix[j,i] = Numeric_Sum + Categorical_Sum
+  return(Distance_matrix)
+
+
+def Distance_Test(Train_dataset, Test_dataset, weight_vector, distance_by_factor, attribute_name):
+  numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']    
+  Numeric_Train = Train_dataset.select_dtypes(include = numerics)
+  Categorical_Train = Train_dataset.select_dtypes(include = 'object')
+  
+  Numeric_Test = Test_dataset.select_dtypes(include = numerics)
+  Categorical_Test = Test_dataset.select_dtypes(include = 'object')
+  
+  
+  Numeric_attributes = len(Numeric_Train.columns)
+  Categorical_attributes = len(Categorical_Train.columns)
+  Numeric_attributes_weights = weight_vector[0:Numeric_attributes]
+  train_observation_length = len(Numeric_Train)
+  test_observation_length = len(Numeric_Test)
+  
+  Distance_matrix = np.zeros((test_observation_length, train_observation_length))
+  for i in range(0,test_observation_length):
+    observation1_Numeric = Numeric_Test.iloc[i]
+    observation1_Categorical = Categorical_Test.iloc[i]
+    for j in range(0,train_observation_length):
+      observation2_Numeric = Numeric_Train.iloc[j]
+      observation2_Categorical = Categorical_Train.iloc[j]
+      Numeric_Sum = 0
+      Categorical_Sum = 0
+      for a1 in range(Numeric_attributes):
+        Numeric_Sum = Numeric_Sum + (Numeric_attributes_weights[a1]*(observation1_Numeric[a1]-observation2_Numeric[a1]))**2
+      for a2 in range(Categorical_attributes):
+        Categorical_attributes_index = a2 + Numeric_attributes
+        i_index = attribute_name[Categorical_attributes_index].index(observation1_Categorical[a2])
+        j_index = attribute_name[Categorical_attributes_index].index(observation2_Categorical[a2])
+        Categorical_Sum = Categorical_Sum + (distance_by_factor[Categorical_attributes_index][i_index,j_index])**2
+      Distance_matrix[i,j] = Numeric_Sum + Categorical_Sum
+  return(Distance_matrix)
+
+
+
+### 거리 가중 행렬
+### Adjancency matrix for GCN
+#def Distance_Weight(distance_matrix, percentile):
+#    dimension = distance_matrix.shape[0]
+#    d = np.percentile(distance_matrix, percentile)
+#    for i in range(dimension-1):
+#        for j in range(i+1,dimension):
+#            if distance_matrix[i,j]<=d:
+#                temp_value = (1-((distance_matrix[i,j]/d)**2))**2
+#                distance_matrix[i,j] = temp_value
+#                distance_matrix[j,i] = temp_value
+#            else:
+#               distance_matrix[i,j] = 0
+#                distance_matrix[j,i] = 0
+#    return(distance_matrix)
+                
+
+### Adjancency matrix for GraphSage
+def Distance_Weight(distance_matrix, percentile):
+    distance_matrix[np.diag_indices_from(distance_matrix)] = 1
+    dimension_row = distance_matrix.shape[0]
+    dimension_col = distance_matrix.shape[1]    
+    temp_matrix = np.zeros([dimension_row, dimension_col])
+    for i in range(dimension_row):
+        d = np.percentile(distance_matrix[i,:], percentile)
+        temp_matrix[i, distance_matrix[i,:] <= d] = 1
+    return(temp_matrix)
+
+def Distance_Weight_Test(distance_matrix, percentile):
+    dimension_row = distance_matrix.shape[0]
+    dimension_col = distance_matrix.shape[1]    
+    temp_matrix = np.zeros([dimension_row, dimension_col])
+    for i in range(dimension_row):
+        d = np.percentile(distance_matrix[i,:], percentile)
+        temp_matrix[i, distance_matrix[i,:] <= d] = 1
+    return(temp_matrix)
+
+
+
+### Model matrix
+def Model_matrix(dataset, base_category):
+    temp_dummies = pd.get_dummies(dataset)
+    base_category_for_dataset = temp_dummies.columns & base_category
+    temp_dummies = temp_dummies.drop(columns = base_category_for_dataset)
+    return(temp_dummies)
+    
+
+
+### 거리 가중 행렬 기반 이웃의 default 수 체크
+def Default_Neighbor_count(adjacency_matrix, train_y):
+    temp_array = np.array(np.dot(adjacency_matrix,train_y) / adjacency_matrix.sum(axis=1), ndmin = 2).T
+    return(temp_array)
+
+
+### Matrix Normalize
+
+def normalize(mx):
+    """Row-normalize sparse matrix"""
+    rowsum = np.array(mx.sum(1))
+    r_inv = np.power(rowsum, -1).flatten()
+    r_inv[np.isinf(r_inv)] = 0.
+    r_mat_inv = sp.diags(r_inv)
+    mx = r_mat_inv.dot(mx)
+    return mx
