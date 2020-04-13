@@ -1,0 +1,47 @@
+### Training
+if args.cuda:
+    net.cuda()
+    train_loan_node_feature = torch.from_numpy(train_loan_node_feature).float().cuda()
+    train_history_node_feature = torch.from_numpy(train_history_node_feature).float().cuda()
+    train_soft_node_feature = torch.from_numpy(train_soft_node_feature).float().cuda()
+    train_loan_adj = torch.from_numpy(train_loan_adj).float().cuda()
+    train_history_adj = torch.from_numpy(train_history_adj).float().cuda()
+    train_soft_adj = torch.from_numpy(train_soft_adj).float().cuda()
+    train_y = torch.tensor(train_y, dtype=torch.long).cuda()
+    test_loan_node_feature = torch.from_numpy(test_loan_node_feature).float().cuda()
+    test_history_node_feature = torch.from_numpy(test_history_node_feature).float().cuda()
+    test_soft_node_feature = torch.from_numpy(test_soft_node_feature).float().cuda()
+    test_loan_adj = torch.from_numpy(test_loan_adj).float().cuda()
+    test_history_adj = torch.from_numpy(test_history_adj).float().cuda()
+    test_soft_adj = torch.from_numpy(test_soft_adj).float().cuda()
+    test_y = torch.tensor(test_y, dtype=torch.long).cuda()
+
+
+
+
+torch.cuda.manual_seed(1728)
+### seed : 1728, epoch: 1200 -> 0.8700
+### seed : 7143, epoch: 2000 -> 0.8893
+torch.manual_seed(5120)
+torch.manual_seed(7143)
+torch.manual_seed(4137)
+torch.manual_seed(9137)
+torch.manual_seed(1047)
+
+
+args = easydict.EasyDict({ "seed": 714, "epochs": 2000, "lr": 0.0001, "weight_decay": 5e-4, "n_layer": 3, 
+                                         "n_block": 1 , "in_dim": 32 , "hidden_dim": 16 , "pred_dim1": 24 , "pred_dim2": 24,
+                                         "bn": True ,"sc": "gc","cuda": True})
+args.act = nn.ReLU()
+
+criterion = nn.BCELoss()
+
+net = GCNNet(args)
+    
+optimizer = optim.Adam(net.parameters(),
+                       lr=args.lr, weight_decay=args.weight_decay)
+net.cuda()
+
+
+for epoch in range(args.epochs):
+    train(epoch, args, criterion)
