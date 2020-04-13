@@ -1,0 +1,60 @@
+def train(epoch, args, criterion):
+    t = time.time()
+    net.train()
+    optimizer.zero_grad()
+    outputs = net(train_loan_node_feature, train_history_node_feature, train_soft_node_feature, 
+                  train_loan_adj, train_history_adj, train_soft_adj)
+    loss = criterion(outputs, train_y.float())
+    
+    pred = (outputs > 0.5).float()
+    correct = (pred.transpose(0,1) == train_y.float()).float().sum()
+    acc_train = correct / len(train_y)
+    
+    loss.backward()
+    optimizer.step()
+    
+    net.eval()
+    outputs = net(test_loan_node_feature, test_history_node_feature, test_soft_node_feature, 
+                  test_loan_adj, test_history_adj, test_soft_adj)
+    outputs = outputs[range(10000,len(outputs))]
+
+    outputs_list = outputs.tolist()
+    test_y_for_test = test_y[range(10000,len(test_y))].float()
+    test_y_for_test_list = test_y_for_test.tolist()
+    loss_test = criterion(outputs, test_y_for_test)
+    pred = (outputs > 0.5).float()
+    correct = (pred.transpose(0,1) == test_y_for_test).float().sum()
+    acc_test = correct / len(test_y_for_test)
+    fpr, tpr, thresholds = metrics.roc_curve(test_y_for_test_list, outputs_list, pos_label=1)
+    roc_auc = metrics.auc(fpr, tpr)
+  
+    
+    print('Epoch: {:04d}'.format(epoch+1),
+          'acc_train: {:.4f}'.format(acc_train),
+          "Test set results:",
+          'acc_test: {:.4f}'.format(acc_test),
+          'auc_test: {:.4f}'.format(roc_auc))
+    
+def test():
+    net.eval()
+    outputs = net(test_loan_node_feature, test_history_node_feature, test_soft_node_feature, 
+               test_loan_adj, test_history_adj, test_soft_adj)
+ 
+    outputs = outputs[range(10000,len(outputs))]
+
+    outputs_list = outputs.tolist()
+    test_y_for_test = test_y[range(10000,len(test_y))].float()
+    test_y_for_test_list = test_y_for_test.tolist()
+    loss_test = criterion(outputs, test_y_for_test)
+    pred = (outputs > 0.5).float()
+    pred = pred.tolist()
+    fpr, tpr, thresholds = metrics.roc_curve(test_y_for_test_list, outputs_list, pos_label=1)
+    roc_auc = metrics.auc(fpr, tpr)
+  
+    print("Accuracy = {}".format(metrics.accuracy_score(test_y_for_test_list, pred)))
+    print("Precision = {}".format(metrics.precision_score(test_y_for_test_list, pred, pos_label=1)))
+    print("Recall = {}".format(metrics.recall_score(test_y_for_test_list, pred, pos_label=1)))
+    print("F1 score = {}".format(metrics.f1_score(test_y_for_test_list, pred, pos_label=1)))
+    print("AUC = {}".format(roc_auc))
+    return(outputs_list)
+    
