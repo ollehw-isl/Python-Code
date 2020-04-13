@@ -1,0 +1,288 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Mar 27 16:56:52 2020
+
+@author: 산업통계연구실
+"""
+
+######## Data preprocessing
+
+import argparse
+import sys
+import time
+import copy
+
+import numpy as np
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import pandas as pd
+
+
+#class GCNDataset(Dataset):
+#    def __init__(self, loan_node_feature, history_node_feature, soft_node_feature, loan_adj, history_adj, soft_adj, status):
+#        self.loan_node_feature = loan_node_feature
+#        self.history_node_feature = history_node_feature
+#        self.soft_node_feature = soft_node_feature
+#        self.loan_adj = loan_adj
+#        self.history_adj = history_adj
+#        self.soft_adj = soft_adj
+#        self.status = status
+#    def __len__(self):
+#        return len(self.loan_adj)
+#    def __getitem__(self, index):
+#        return self.loan_node_feature[index], self.history_node_feature[index], self.soft_node_feature[index], self.loan_adj[index], self.history_adj[index], self.soft_adj[index], self.status[index]
+
+#class GCNTest(Dataset):
+#    def __init__(self, 
+#                 train_loan_node_feature, train_history_node_feature, train_soft_node_feature, 
+#                test_loan_node_feature, test_history_node_feature, test_soft_node_feature, 
+#                 train_loan_adj, train_history_adj, train_soft_adj, 
+#                 test_loan_adj, test_history_adj, test_soft_adj, status):
+#        self.train_loan_node_feature = train_loan_node_feature
+#        self.train_history_node_feature = train_history_node_feature
+#        self.train_soft_node_feature = train_soft_node_feature
+#        self.test_loan_node_feature = test_loan_node_feature
+#        self.test_history_node_feature = test_history_node_feature
+#        self.test_soft_node_feature = test_soft_node_feature
+#        
+#        self.train_loan_adj = train_loan_adj
+#       self.train_history_adj = train_history_adj
+#        self.train_soft_adj = train_soft_adj
+#        self.test_loan_adj = test_loan_adj
+#        self.test_history_adj = test_history_adj
+#        self.test_soft_adj = test_soft_adj
+#        
+#        self.status = status
+#        
+#    def __len__(self):
+#        return len(self.test_loan_node_feature)
+#    def __getitem__(self, index):
+#        return self.test_loan_node_feature[index], self.test_history_node_feature[index], self.test_soft_node_feature[index], self.test_loan_adj[index], self.test_history_adj[index], self.test_soft_adj[index], self.status[index]
+
+
+
+
+#def partition(train_set, val_set, test_set):
+#    partition = {'train' : train_set,
+#                 'val' : val_set}
+#    return partition
+
+
+
+######## Model consturction
+class GCNLayer(nn.Module):
+    def __init__(self, in_dim, out_dim, act=None, bn=False):
+        super(GCNLayer, self).__init__()
+        
+        self.use_bn = bn
+        self.linear = nn.Linear(in_dim, out_dim)
+        nn.init.xavier_uniform_(self.linear.weight)
+        self.bn =nn.BatchNorm1d(out_dim)
+        self.activation = act
+        
+    def forward(self, x, adj):
+        out = self.linear(x)
+        out = torch.matmul(adj, out)
+        if self.use_bn:
+            out = self.bn(out)
+        if self.activation != None:
+            out = self.activation(out)
+        return out, adj
+
+class SkipConnection(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super(SkipConnection, self).__init__()
+        
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        
+        self.linear = nn.Linear(in_dim, out_dim, bias = False)
+        
+    def forward(self, in_x, out_x):
+        if (self.in_dim != self.out_dim):
+            in_x = self.linear(in_x)
+        out = in_x + out_x
+        return out
+
+
+class Highway(nn.Module):
+    
+    def __init__(self, in_dim, out_dim):
+        super(Highway, self).__init__()
+        
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        
+        self.linear = nn.Linear(in_dim, out_dim, bias=False)
+        self.linear_coef_in = nn.Linear(out_dim, out_dim)
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, in_x, out_x):
+        if (self.in_dim != self.out_dim):
+            in_x = self.linear(in_x)
+        z = self.gate_coefficient(in_x)
+        out = torch.mul(z, out_x) + torch.mul(1.0-z, in_x)
+        return out
+            
+    def gate_coefficient(self, in_x):
+        x1 = self.linear_coef_in(in_x)
+        return self.sigmoid(x1)
+
+
+
+class GatedSkipConnection(nn.Module):
+    
+    def __init__(self, in_dim, out_dim):
+        super(GatedSkipConnection, self).__init__()
+        
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        
+        self.linear = nn.Linear(in_dim, out_dim, bias=False)
+        self.linear_coef_in = nn.Linear(out_dim, out_dim)
+        self.linear_coef_out = nn.Linear(out_dim, out_dim)
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, in_x, out_x):
+        if (self.in_dim != self.out_dim):
+            in_x = self.linear(in_x)
+        z = self.gate_coefficient(in_x, out_x)
+        out = torch.mul(z, out_x) + torch.mul(1.0-z, in_x)
+        return out
+            
+    def gate_coefficient(self, in_x, out_x):
+        x1 = self.linear_coef_in(in_x)
+        x2 = self.linear_coef_out(out_x)
+        return self.sigmoid(x1+x2)
+
+
+class GCNBlock(nn.Module):
+    def __init__(self, n_layer, in_dim, hidden_dim, out_dim, bn = True, sc = 'sc'):
+        super(GCNBlock, self).__init__()
+        self.layers = nn.ModuleList()
+        for i in range(n_layer):
+            self.layers.append(GCNLayer(in_dim if i==0 else hidden_dim,
+                                        out_dim if i==n_layer-1 else hidden_dim,
+                                        nn.ReLU() if i!=n_layer-1 else None,
+                                        bn))
+        self.relu = nn.ReLU()
+        if sc=='sc':
+            self.sc = SkipConnection(in_dim, out_dim)
+        elif sc == 'no':
+            self.sc = None
+        elif sc == 'gc':
+            self.sc = GatedSkipConnection(in_dim, out_dim)
+        elif sc == 'hw':
+            self.sc = Highway(in_dim, out_dim)
+        else:
+            assert False, "Wrong sc type."
+            
+    def forward(self, x, adj):
+        residual = x
+        for i, layer in enumerate(self.layers):
+            out, adj = layer((x if i==0 else out), adj)
+        if self.sc != None:
+            out = self.sc(residual, out)
+        out = self.relu(out)
+        return out, adj
+            
+
+class Classifier(nn.Module):
+    def __init__(self, in_dim, out_dim, act = None):
+        super(Classifier, self).__init__()
+        
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        
+        self.linear = nn.Linear(self.in_dim, self.out_dim)
+        nn.init.xavier_uniform_(self.linear.weight)
+        self.activation = act
+        
+    def forward(self, x):
+        out = self.linear(x)
+        if self.activation != None:
+            out = self.activation(out)
+        return out
+
+class GCNNet(nn.Module):
+    def __init__(self, args):
+        super(GCNNet, self).__init__()
+        
+        self.blocks_loan = nn.ModuleList()
+        for i in range(args.n_block):
+            self.blocks_loan.append(GCNBlock(args.n_layer,
+                                        9 if i==0 else args.hidden_dim,
+                                        args.hidden_dim,
+                                        args.hidden_dim,   ### output dim 따로
+                                        args.bn,
+                                        args.sc))
+        
+        self.blocks_history = nn.ModuleList()
+        for i in range(args.n_block):
+            self.blocks_history.append(GCNBlock(args.n_layer,
+                                        13 if i==0 else args.hidden_dim,
+                                        args.hidden_dim,
+                                        args.hidden_dim,   ### output dim 따로
+                                        args.bn,
+                                        args.sc))
+        
+        self.blocks_soft = nn.ModuleList()
+        for i in range(args.n_block):
+            self.blocks_soft.append(GCNBlock(args.n_layer,
+                                        12 if i==0 else args.hidden_dim,
+                                        args.hidden_dim,
+                                        args.hidden_dim,   ### output dim 따로
+                                        args.bn,
+                                        args.sc))
+        
+        self.pred1 = Classifier(3 * args.hidden_dim, args.pred_dim1,act = nn.ReLU())
+        self.pred2 = Classifier(args.pred_dim1, args.pred_dim2,act = nn.ReLU())
+        self.pred3 = Classifier(args.pred_dim2, 1,act = nn.Sigmoid())
+    
+    def forward(self, loan_node_feature, history_node_feature, soft_node_feature, loan_adj, history_adj, soft_adj):
+        for i, block in enumerate(self.blocks_loan):
+            out1, loan_adj = block((loan_node_feature if i==0 else out1), loan_adj)
+        for i, block in enumerate(self.blocks_history):
+            out2, history_adj = block((history_node_feature if i==0 else out2), history_adj)
+        for i, block in enumerate(self.blocks_soft):
+            out3, soft_adj = block((soft_node_feature if i==0 else out3), soft_adj)
+        out4 = torch.cat([out1, out2, out3], dim = 1)
+        out = self.pred1(out4)
+        out = self.pred2(out)
+        out = self.pred3(out)
+        return out
+        
+class One_block_GCNNet(nn.Module):
+    def __init__(self, args):
+        super(One_block_GCNNet, self).__init__()
+        
+        self.blocks_gcn = nn.ModuleList()
+        for i in range(args.n_block):
+            self.blocks_gcn.append(GCNBlock(args.n_layer,
+                                        args.in_dim if i==0 else args.hidden_dim,
+                                        args.hidden_dim,
+                                        args.hidden_dim,   ### output dim 따로
+                                        args.bn,
+                                        args.sc))
+        
+
+        
+        self.pred1 = Classifier(args.hidden_dim, args.pred_dim1,act = nn.ReLU())
+        self.pred2 = Classifier(args.pred_dim1, args.pred_dim2,act = nn.ReLU())
+        self.pred3 = Classifier(args.pred_dim2, 1,act = nn.Sigmoid())
+    
+    def forward(self, node_feature, adj):
+        for i, block in enumerate(self.blocks_gcn):
+            out, adj = block((node_feature if i==0 else out), adj)
+       
+        out = self.pred1(out)
+        out = self.pred2(out)
+        out = self.pred3(out)
+        return out
+        
+
+
+
+
