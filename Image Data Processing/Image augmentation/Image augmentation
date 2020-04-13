@@ -1,0 +1,138 @@
+# importing all the required libraries
+import warnings
+warnings.filterwarnings('ignore')
+import numpy as np
+import skimage.io as io
+from skimage.transform import rotate, AffineTransform, warp, SimilarityTransform
+from skimage.util import random_noise
+from skimage.filters import gaussian
+import matplotlib.pyplot as plt
+% matplotlib inline
+
+import torch
+import os
+from PIL import Image
+import numpy as np
+import pandas as pd
+ 
+
+### image 불러오기.
+path_dir = 'D:/Homework3/Defect'
+file_list = os.listdir(path_dir)[0:6]
+
+
+# Rotate
+image = io.imread('D:/Homework3/Defect/Class4_def/1.png')
+io.imshow(image)
+rotated = rotate(image, angle=90, mode = 'wrap')
+io.imshow(rotated)
+
+# Shift
+transform = AffineTransform(translation=(50,50))
+
+wrapShift = warp(image,transform,mode='wrap')
+io.imshow(wrapShift)
+
+#flip image left-to-right
+flipLR = np.fliplr(image)
+io.imshow(flipLR)
+
+#standard deviation for noise to be added in the image
+sigma=0.1
+#add random noise to the image
+noisyRandom = random_noise(image,var=sigma**2)
+io.imshow(noisyRandom)
+
+#blur the image
+blurred = gaussian(image,sigma=5,multichannel=True)
+io.imshow(blurred)
+
+
+save_image(rotated, "D:/Homework3/Defect/new_images/rotated.png")
+io.imsave("D:/Homework3/Defect/new_images/rotated.png", rotated)
+
+data_train = []
+
+
+
+# importing all the required libraries
+import warnings
+warnings.filterwarnings('ignore')
+import numpy as np
+import skimage.io as io
+from skimage.transform import rotate, AffineTransform, warp, SimilarityTransform
+from skimage.util import random_noise
+from skimage.filters import gaussian
+import matplotlib.pyplot as plt
+% matplotlib inline
+
+import torch
+import os
+from PIL import Image
+import numpy as np
+import pandas as pd
+ 
+
+### image 불러오기.
+path_dir = 'D:/Homework3/Defect'
+file_list = os.listdir(path_dir)[0:6]
+
+
+for file1 in file_list:
+    path_dir = 'D:/Homework3/Defect/%s'%file1
+    file_list1 = os.listdir(path_dir)
+    i=1
+    for file2 in file_list1:
+        image = io.imread('D:/Homework3/Defect/%s/%s'%(file1,file2))
+        rotated_90 = rotate(image, angle=90, mode = 'wrap')
+        io.imsave("D:/Homework3/Defect/New/%s/rotated90_%s%d.png"%(file1,file1,i), rotated_90)
+        rotated_180 = rotate(image, angle=180, mode = 'wrap')
+        io.imsave("D:/Homework3/Defect/New/%s/rotated180_%s%d.png"%(file1,file1,i), rotated_180)
+        rotated_270 = rotate(image, angle=270, mode = 'wrap')
+        io.imsave("D:/Homework3/Defect/New/%s/rotated270_%s%d.png"%(file1,file1,i), rotated_270)
+        flipLR = np.fliplr(image)
+        io.imsave("D:/Homework3/Defect/New/%s/flipLR_%s%d.png"%(file1,file1,i), flipLR)
+        flipUD = np.flipud(image)
+        io.imsave("D:/Homework3/Defect/New/%s/flipUD_%s%d.png"%(file1,file1,i), flipUD)
+        noisyRandom = random_noise(image,var=sigma**2)
+        io.imsave("D:/Homework3/Defect/New/%s/noisyRandom_%s%d.png"%(file1,file1,i), noisyRandom)
+        rotated_90_noisyRandom = random_noise(rotated_90,var=sigma**2)
+        io.imsave("D:/Homework3/Defect/New/%s/rotated_90_noisyRandom_%s%d.png"%(file1,file1,i), rotated_90_noisyRandom)
+        rotated_180_noisyRandom = random_noise(rotated_180,var=sigma**2)
+        io.imsave("D:/Homework3/Defect/New/%s/rotated_180_noisyRandom_%s%d.png"%(file1,file1,i), rotated_180_noisyRandom)
+        rotated_270_noisyRandom = random_noise(rotated_270,var=sigma**2)
+        io.imsave("D:/Homework3/Defect/New/%s/rotated_270_noisyRandom_%s%d.png"%(file1,file1,i), rotated_270_noisyRandom)
+        flipLR_noisyRandom = random_noise(flipLR,var=sigma**2)
+        io.imsave("D:/Homework3/Defect/New/%s/flipLR_noisyRandom_%s%d.png"%(file1,file1,i), flipLR_noisyRandom)
+        flipUD_noisyRandom = random_noise(flipUD,var=sigma**2)
+        io.imsave("D:/Homework3/Defect/New/%s/flipUD_noisyRandom_%s%d.png"%(file1,file1,i), flipUD_noisyRandom)
+        blurred = gaussian(image,sigma=5,multichannel=True)
+        io.imsave("D:/Homework3/Defect/New/%s/blurred_%s%d.png"%(file1,file1,i), blurred)
+        rotated_90_blurred = gaussian(rotated_90,sigma=5,multichannel=True)
+        io.imsave("D:/Homework3/Defect/New/%s/rotated_90_blurred_%s%d.png"%(file1,file1,i), rotated_90_blurred)
+        rotated_180_blurred = gaussian(rotated_180,sigma=5,multichannel=True)
+        io.imsave("D:/Homework3/Defect/New/%s/rotated_180_blurred_%s%d.png"%(file1,file1,i), rotated_180_blurred)
+        rotated_270_blurred = gaussian(rotated_270,sigma=5,multichannel=True)
+        io.imsave("D:/Homework3/Defect/New/%s/rotated_270_blurred_%s%d.png"%(file1,file1,i), rotated_270_blurred)
+        flipLR_blurred = gaussian(flipLR,sigma=5,multichannel=True)
+        io.imsave("D:/Homework3/Defect/New/%s/flipLR_blurred_%s%d.png"%(file1,file1,i), flipLR_blurred)
+        flipUD_blurred = gaussian(flipUD,sigma=5,multichannel=True)
+        io.imsave("D:/Homework3/Defect/New/%s/flipUD_blurred_%s%d.png"%(file1,file1,i), flipUD_blurred)
+        i = i + 1
+        
+
+# Normal
+### image 불러오기.
+path_dir = 'D:/Homework3/Normal'
+file_list = os.listdir(path_dir)[0:6]
+for file1 in file_list:
+    path_dir = 'D:/Homework3/Normal/%s'%file1
+    file_list1 = os.listdir(path_dir)
+    i=1
+    for file2 in file_list1:
+        image = io.imread('D:/Homework3/Normal/%s/%s'%(file1,file2))
+        noisyRandom = random_noise(image,var=sigma**2)
+        io.imsave("D:/Homework3/Normal/New/%s/noisyRandom_%s%d.png"%(file1,file1,i), noisyRandom)
+        blurred = gaussian(image,sigma=5,multichannel=True)
+        io.imsave("D:/Homework3/Normal/New/%s/blurred_%s%d.png"%(file1,file1,i), blurred)
+        i = i + 1
