@@ -1,0 +1,45 @@
+import random
+import numpy as np
+import pandas as pd
+
+### Model matrix
+def Model_matrix(dataset, base_category):
+    temp_dummies = pd.get_dummies(dataset)
+    base_category_for_dataset = temp_dummies.columns & base_category
+    temp_dummies = temp_dummies.drop(columns = base_category_for_dataset)
+    return(temp_dummies)
+    
+
+def Test_sampling1(Dataset, C1_num, C2_num, sample_num, seed):
+    np.random.seed(seed)
+    fully_sample = np.random.choice(C1_num,sample_num, replace=False)
+    charged_sample = np.random.choice(range(C1_num,len(Dataset)),sample_num, replace=False)
+    Dataset_sample = pd.concat([Dataset.iloc[list(fully_sample),:], Dataset.iloc[list(charged_sample),:]])
+    Dataset_sample = Dataset_sample.reset_index()
+    Dataset_sample = Dataset_sample.drop(columns=['index'])
+    return fully_sample, charged_sample, Dataset_sample
+
+
+
+
+def X_Y_split(Dataset):
+    temp_dummies = pd.get_dummies(Dataset)
+    train_y_save = list(temp_dummies['loan_status_Charged Off'])
+    base_category = temp_dummies.columns[[11, 13, 18, 19, 21, 24, 26, 29, 32, 34, 40, 43]]
+    train_x = Model_matrix(Dataset, base_category)
+    train_x = train_x.drop('loan_status_Charged Off', axis = 1)
+    return train_x, train_y_save
+
+
+
+
+def Test_sampling(Dataset, C1_num, C2_num,C3_num,  sample_num, seed):
+    np.random.seed(seed)
+    fully_sample = np.random.choice(range(C1_num,C2_num),sample_num, replace=False)
+    charged_sample = np.random.choice(range(C2_num,C3_num),sample_num, replace=False)
+    Dataset_sample = pd.concat([Dataset.iloc[list(fully_sample),:], Dataset.iloc[list(charged_sample),:]])
+    Dataset_sample = Dataset_sample.reset_index()
+    Dataset_sample = Dataset_sample.drop(columns=['index'])
+    return fully_sample, charged_sample, Dataset_sample
+
+
