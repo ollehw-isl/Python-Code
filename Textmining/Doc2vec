@@ -1,0 +1,106 @@
+import pandas as pd
+import numpy as np
+from tqdm import tqdm
+tqdm.pandas(desc="progress-bar")
+from gensim.models import Doc2Vec
+from sklearn import utils
+from sklearn.model_selection import train_test_split
+import gensim
+from sklearn.linear_model import LogisticRegression
+from gensim.models.doc2vec import TaggedDocument
+import re
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from nltk.tokenize import sent_tokenize, word_tokenize
+from nltk.tokenize import sent_tokenize, word_tokenize
+from nltk.corpus import stopwords
+
+df = pd.read_csv('patent_text1.csv')
+df.head(10)
+df.index = range(437231)
+
+import nltk
+from nltk.corpus import stopwords
+def tokenize_text(text):
+    tokens = []
+    for sent in nltk.sent_tokenize(text):
+        for word in nltk.word_tokenize(sent):
+            if len(word) < 2:
+                continue
+            tokens.append(word.lower())
+    return tokens
+
+import gensim
+import csv
+import numpy as np
+import pandas as pd
+from gensim.models.doc2vec import TaggedDocument, Doc2Vec
+from gensim.parsing.preprocessing import preprocess_string
+import multiprocessing
+cores = multiprocessing.cpu_count()
+
+texts = df
+
+dimension = 300
+texts = csv.DictReader(open('patent_text1.csv', encoding="ISO-8859-1"))
+documents = [TaggedDocument(text['Abstract'].split(), [text['ID']])  for text in texts]
+model_com = Doc2Vec(documents, vector_size=dimension, window=5, min_count=2, workers=cores, epochs=20)
+
+vector = {}
+for name in df['ID']:
+    vector[name] = model_com.docvecs[str(name)]
+pd.DataFrame(vector).to_csv('vector_result.csv')
+df['ID'].head
+
+
+### 코사인 유사도 구하기.
+from numpy import dot
+from numpy.linalg import norm
+import numpy as np
+def cos_sim(A, B):
+       return dot(A, B)/(norm(A)*norm(B))
+   
+hyundai = pd.read_csv('Hyundai_Tel_Abstract.csv')
+ICT = pd.read_csv('ICT_Abstract_final.csv')
+hyundai_ID = hyundai["ID"]
+ICT_ID = ICT["ID"]
+
+vector = {}
+for name1 in ICT['ID']:
+    cos = []
+    for name2 in hyundai['ID']:
+        x1 = model_com.docvecs[str(name1)]
+        x2 = model_com.docvecs[str(name2)]
+        cos.append(cos_sim(x1, x2))
+    max_cos = max(cos)
+    vector[name1] = max_cos
+
+
+cos = []
+for name2 in hyundai['ID']:
+    x1 = model_com.docvecs[str(462526)]
+    x2 = model_com.docvecs[str(name2)]
+    cos.append(cos_sim(x1, x2))
+    
+max(cos)
+
+vector = {}
+for name1 in ICT['ID']:
+    cos = []
+    for name2 in hyundai['ID']:
+        x1 = model_com.docvecs[str(name1)]
+        x2 = model_com.docvecs[str(name2)]
+        cos.append(cos_sim(x1, x2))
+    max_cos = max(cos)
+    vector[name1] = max_cos
+
+test_df = pd.DataFrame(vector)
+simil = list(vector.values())
+
+data = {'ID' : ICT_ID,
+        'Similarity' : simil}
+from pandas import Series, DataFrame
+df = DataFrame(data)
+df.head()
+df.to_csv('Similarity.csv')
